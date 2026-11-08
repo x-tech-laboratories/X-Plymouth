@@ -1,4 +1,5 @@
 testvm-efi-vars.fd
 testvm.qcow2
 result
-node_modules.claude/
+node_modules
+.claude/
