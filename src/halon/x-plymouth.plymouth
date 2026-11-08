@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=x-plymouth
+Description=A NixOS Plymouth theme that fades into the NixOS logo, in the X-Login @VARIANT@ scheme
+ModuleName=script
+
+[script]
+ImageDir=@THEME_DIR@
+ScriptFile=@THEME_DIR@/x-plymouth.script
