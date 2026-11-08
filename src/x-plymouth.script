@@ -1,0 +1,308 @@
+# X-Plymouth, for every variant. The two-step module draws every label in white,
+# so this script draws its own text in the variant's palette. x-plymouth.nix
+# replaces each colour placeholder with "red, green, blue" before installing.
+
+Window.SetBackgroundTopColor (@SURFACE_ROOT@);
+Window.SetBackgroundBottomColor (@SURFACE_ROOT@);
+
+title_font = "Cantarell Light 16";
+font = "Cantarell 12";
+
+fun centre_x (image)
+  {
+    return Window.GetX () + Window.GetWidth () / 2 - image.GetWidth () / 2;
+  }
+
+fun at_height (fraction, image)
+  {
+    return Window.GetY () + Window.GetHeight () * fraction - image.GetHeight () / 2;
+  }
+
+#----------------------------------------- Logo --------------------------------
+
+# logo.png and glow.png share a size and centre; the glow is the logo blurred,
+# made at build time, and pulsing it is the whole animation.
+logo.image = Image ("logo.png");
+logo.sprite = Sprite (logo.image);
+logo.sprite.SetPosition (centre_x (logo.image), at_height (0.5, logo.image), 1);
+
+glow.image = Image ("glow.png");
+glow.sprite = Sprite (glow.image);
+glow.sprite.SetPosition (centre_x (glow.image), at_height (0.5, glow.image), 0);
+glow.sprite.SetOpacity (0);
+
+refresh_rate = 50;
+Plymouth.SetRefreshRate (refresh_rate);
+pulse.tick = 0;
+
+# A 6 second cycle: rise for 2.5s, hold for 0.5s, fall for 2.5s, rest for 0.5s.
+# p^1.75 matches the ease-in of the frames this replaced.
+fun ease_in (p)
+  {
+    return p * Math.Sqrt (p) * Math.Sqrt (Math.Sqrt (p));
+  }
+
+fun pulse_opacity (seconds)
+  {
+    if (seconds < 2.5) return ease_in (seconds / 2.5);
+    if (seconds < 3)   return 1;
+    if (seconds < 5.5) return 1 - ease_in ((seconds - 3) / 2.5);
+    return 0;
+  }
+
+#----------------------------------------- Title --------------------------------
+
+mode = Plymouth.GetMode ();
+if (mode == "shutdown")              title.text = "Shutting Down...";
+else if (mode == "reboot")           title.text = "Restarting...";
+else if (mode == "updates")          title.text = "Installing System Updates...";
+else if (mode == "system-upgrade")   title.text = "Installing System Upgrades...";
+else if (mode == "firmware-upgrade") title.text = "Installing Firmware Updates...";
+else                                 title.text = "Starting Up...";
+
+title.image = Image.Text (title.text, @TEXT_SECONDARY@, 1, title_font);
+title.sprite = Sprite (title.image);
+title.sprite.SetPosition (centre_x (title.image), at_height (0.75, title.image), 1);
+
+if (mode == "updates" || mode == "system-upgrade" || mode == "firmware-upgrade")
+  {
+    subtitle.image = Image.Text ("Please do not turn off your computer.", @TEXT_TERTIARY@, 1, font);
+    subtitle.sprite = Sprite (subtitle.image);
+    subtitle.sprite.SetPosition (centre_x (subtitle.image), title.sprite.GetY () + title.image.GetHeight () + 8, 1);
+  }
+
+#----------------------------------------- Progress Bar --------------------------------
+
+progress.width = 350;
+progress.height = 3;
+progress.trough = Image ("progress-trough.png").Scale (progress.width, progress.height);
+progress.fill = Image ("progress-fill.png");
+progress.trough_sprite = Sprite (progress.trough);
+progress.trough_sprite.SetPosition (centre_x (progress.trough), at_height (0.8, progress.trough), 1);
+progress.fill_sprite = Sprite ();
+progress.fill_sprite.SetPosition (progress.trough_sprite.GetX (), progress.trough_sprite.GetY (), 2);
+progress.shown_width = 0;
+
+fun show_progress (fraction)
+  {
+    width = Math.Int (progress.width * fraction);
+    if (width > 0 && width != progress.shown_width)
+      {
+        progress.fill_sprite.SetImage (progress.fill.Scale (width, progress.height));
+        progress.shown_width = width;
+      }
+  }
+
+fun boot_progress_callback (duration, fraction)
+  {
+    show_progress (fraction);
+  }
+
+fun system_update_callback (percent)
+  {
+    show_progress (percent / 100);
+  }
+
+Plymouth.SetBootProgressFunction (boot_progress_callback);
+Plymouth.SetSystemUpdateFunction (system_update_callback);
+
+#----------------------------------------- Status Log --------------------------------
+
+# The last few statuses, newest first, under the progress bar and fading with
+# age down to a quarter. systemd sends the name of each unit it starts as a
+# status; messages from `plymouth display-message` join the same list.
+log.size = @STATUS_LINES@;
+log.count = 0;
+log.top = progress.trough_sprite.GetY () + progress.height + 16;
+log.line_height = Image.Text ("Xg", @TEXT_TERTIARY@, 1, font).GetHeight () + 4;
+log.visible = 1;
+for (i = 0; i < log.size; i++)
+  {
+    log.sprites[i] = Sprite ();
+    if (log.size > 1) log.fade[i] = 1 - 0.75 * i / (log.size - 1);
+    else              log.fade[i] = 1;
+  }
+
+fun log_draw ()
+  {
+    for (i = 0; i < log.size; i++)
+      {
+        if (i < log.count)
+          {
+            log.sprites[i].SetImage (log.images[i]);
+            log.sprites[i].SetPosition (centre_x (log.images[i]), log.top + i * log.line_height, 1);
+            log.sprites[i].SetOpacity (log.fade[i] * log.visible);
+          }
+        else
+          log.sprites[i].SetOpacity (0);
+      }
+  }
+
+fun log_add (text)
+  {
+    if (log.size == 0) return;
+    if (log.count < log.size) log.count++;
+    for (i = log.count - 1; i > 0; i--)
+      {
+        log.lines[i] = log.lines[i - 1];
+        log.images[i] = log.images[i - 1];
+      }
+    log.lines[0] = text;
+    log.images[0] = Image.Text (text, @TEXT_TERTIARY@, 1, font);
+    log_draw ();
+  }
+
+fun log_remove (text)
+  {
+    for (i = 0; i < log.count; i++)
+      if (log.lines[i] == text)
+        {
+          for (j = i; j < log.count - 1; j++)
+            {
+              log.lines[j] = log.lines[j + 1];
+              log.images[j] = log.images[j + 1];
+            }
+          log.count--;
+          log_draw ();
+          return;
+        }
+  }
+
+Plymouth.SetUpdateStatusFunction (log_add);
+Plymouth.SetDisplayMessageFunction (log_add);
+Plymouth.SetHideMessageFunction (log_remove);
+
+#----------------------------------------- Dialog --------------------------------
+
+# The dialog takes the logo's place, so the splash hides while it is up.
+fun splash_opacity (opacity)
+  {
+    logo.sprite.SetOpacity (opacity);
+    if (opacity == 0) glow.sprite.SetOpacity (0);
+    title.sprite.SetOpacity (opacity);
+    if (subtitle.sprite) subtitle.sprite.SetOpacity (opacity);
+    progress.trough_sprite.SetOpacity (opacity);
+    progress.fill_sprite.SetOpacity (opacity);
+    log.visible = opacity;
+    log_draw ();
+  }
+
+fun dialog_setup ()
+  {
+    local.entry;
+    local.lock;
+
+    entry.image = Image ("entry.png");
+    lock.image = Image ("lock.png");
+    gap = 12;
+
+    left = Window.GetX () + Window.GetWidth () / 2 - (lock.image.GetWidth () + gap + entry.image.GetWidth ()) / 2;
+    entry.y = at_height (0.5, entry.image);
+
+    lock.sprite = Sprite (lock.image);
+    lock.sprite.SetPosition (left, at_height (0.5, lock.image), 10);
+
+    entry.x = left + lock.image.GetWidth () + gap;
+    entry.sprite = Sprite (entry.image);
+    entry.sprite.SetPosition (entry.x, entry.y, 10);
+
+    global.dialog.entry = entry;
+    global.dialog.lock = lock;
+    global.dialog.bullet_image = Image ("bullet.png");
+    global.dialog.capslock.image = Image ("capslock.png");
+    global.dialog.capslock.sprite = Sprite (dialog.capslock.image);
+    dialog.capslock.sprite.SetPosition (entry.x + entry.image.GetWidth () + gap, at_height (0.5, dialog.capslock.image), 10);
+    global.dialog.prompt.sprite = Sprite ();
+    global.dialog.text.sprite = Sprite ();
+  }
+
+fun dialog_opacity (opacity)
+  {
+    dialog.entry.sprite.SetOpacity (opacity);
+    dialog.lock.sprite.SetOpacity (opacity);
+    dialog.prompt.sprite.SetOpacity (opacity);
+    dialog.text.sprite.SetOpacity (opacity);
+    for (index = 0; dialog.bullet[index]; index++)
+      dialog.bullet[index].sprite.SetOpacity (0);
+  }
+
+fun show_dialog (prompt)
+  {
+    if (!global.dialog)
+      dialog_setup ();
+    splash_opacity (0);
+    dialog_opacity (1);
+
+    # PAM ends prompts with a colon; the prompt sits under the field, so drop it.
+    length = String (prompt).Length ();
+    if (length > 0 && String (prompt).CharAt (length - 1) == ":")
+      prompt = String (prompt).SubString (0, length - 1);
+
+    dialog.prompt.image = Image.Text (prompt, @TEXT_SECONDARY@, 1, font);
+    dialog.prompt.sprite.SetImage (dialog.prompt.image);
+    dialog.prompt.sprite.SetPosition (centre_x (dialog.prompt.image), dialog.entry.y + dialog.entry.image.GetHeight () + 12, 10);
+  }
+
+fun display_password_callback (prompt, bullets)
+  {
+    global.status = "password";
+    show_dialog (prompt);
+    dialog.text.sprite.SetOpacity (0);
+    padding = (dialog.entry.image.GetHeight () - dialog.bullet_image.GetHeight ()) / 2;
+    for (index = 0; dialog.bullet[index] || index < bullets; index++)
+      {
+        if (!dialog.bullet[index])
+          {
+            dialog.bullet[index].sprite = Sprite (dialog.bullet_image);
+            dialog.bullet[index].sprite.SetPosition (dialog.entry.x + padding + index * (dialog.bullet_image.GetWidth () + 4),
+                                                     dialog.entry.y + padding, 11);
+          }
+        if (index < bullets)
+          dialog.bullet[index].sprite.SetOpacity (1);
+        else
+          dialog.bullet[index].sprite.SetOpacity (0);
+      }
+  }
+
+fun display_question_callback (prompt, entry_text)
+  {
+    global.status = "question";
+    show_dialog (prompt);
+    dialog.text.image = Image.Text (entry_text, @TEXT_HEADING@, 1, font);
+    dialog.text.sprite.SetImage (dialog.text.image);
+    dialog.text.sprite.SetPosition (dialog.entry.x + 12, dialog.entry.y + (dialog.entry.image.GetHeight () - dialog.text.image.GetHeight ()) / 2, 11);
+  }
+
+fun display_normal_callback ()
+  {
+    global.status = "normal";
+    if (global.dialog)
+      {
+        dialog_opacity (0);
+        dialog.capslock.sprite.SetOpacity (0);
+      }
+    splash_opacity (1);
+  }
+
+Plymouth.SetDisplayPasswordFunction (display_password_callback);
+Plymouth.SetDisplayQuestionFunction (display_question_callback);
+Plymouth.SetDisplayNormalFunction (display_normal_callback);
+
+#----------------------------------------- Refresh --------------------------------
+
+status = "normal";
+
+fun refresh_callback ()
+  {
+    if (status == "normal")
+      {
+        pulse.tick++;
+        glow.sprite.SetOpacity (pulse_opacity ((pulse.tick % (6 * refresh_rate)) / refresh_rate));
+      }
+    else if (Plymouth.GetCapslockState ())
+      dialog.capslock.sprite.SetOpacity (1);
+    else
+      dialog.capslock.sprite.SetOpacity (0);
+  }
+
+Plymouth.SetRefreshFunction (refresh_callback);

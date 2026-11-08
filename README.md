@@ -2,11 +2,15 @@
 
 This repo contains a plymouth theme for NixOS that pulses the NixOS logo. Please check out the credits section for all the work that inspired this.
 
-It comes in a light and a dark scheme that match the [X-Login](https://github.com/x-tech-laboratories/X-Login) greeter's Halon theme, plus the original black and white look.
+It comes in a light and a dark scheme that match the [X-Login](https://github.com/x-tech-laboratories/X-Login) greeter's Halon theme, plus the original black and white look. The logo, its glow colour and the number of boot status lines can all be changed.
 
-| Light (default) | Dark | Classic |
-| --- | --- | --- |
-| ![Light scheme](screenshot-light.png) | ![Dark scheme](screenshot-dark.png) | ![Classic scheme](screenshot.png) |
+| Light (default) | Dark |
+| --- | --- |
+| ![Light scheme booting](boot-light.gif) | ![Dark scheme booting](boot-dark.gif) |
+
+Classic:
+
+![Classic scheme](screenshot.png)
 
 **Warning: Using this repo for some reason bloats the `initrd` quite a bit (up to 50 MB). Use it with [boot.loader.systemd-boot.configurationLimit](https://search.nixos.org/options?channel=23.05&show=boot.loader.systemd-boot.configurationLimit&from=0&size=50&sort=relevance&type=packages&query=systemd-boot) or a `/boot` of at least a gigabyte.
 On EFI Systems it's also possible to keep the initrd on the main partition when switching to Grub. Checkout the [nixos wiki](https://wiki.nixos.org/wiki/Bootloader#Keeping_kernels/initrd_on_the_main_partition).**
@@ -60,42 +64,35 @@ in
 
 No configuration is needed. The theme will automatically enable plymouth and set the theme to itself.
 
-Plymouth runs before any desktop session, so it cannot follow the system's colour scheme. Pick one in your configuration instead:
+Every setting is optional:
 
 ```nix
-x-plymouth.variant = "dark"; # "light" (default), "dark" or "classic"
+x-plymouth = {
+  variant = "dark";          # "light" (default), "dark" or "classic"
+  logo = ./my-logo.svg;      # SVG or any image ImageMagick reads; defaults to the NixOS logo
+  logoRecolor = true;        # paint the logo in the scheme's text colour; false keeps its own colours
+  logoWidth = 614;           # logo width on screen in pixels, glow excluded
+  glowColor = "#f59e0b";     # colour of the pulsing glow; defaults to the scheme's accent
+  statusLines = 5;           # boot statuses listed under the progress bar; 0 hides them
+};
 ```
 
-The light and dark schemes use Plymouth's script module ([src/halon/x-plymouth.script](src/halon/x-plymouth.script)), because the two-step module that the classic scheme uses always draws its text in white. Their colours are X-Login's Halon tokens, kept in [x-plymouth.nix](x-plymouth.nix); the build recolours the logo frames and renders the dialog icons from the SVGs in [src/halon/](src/halon/).
+Plymouth runs before any desktop session, so it cannot follow the system's colour scheme; the variant is fixed here.
 
-## Building The Theme
+The status lines list what systemd reports to Plymouth, which is the name of each unit it starts (`NetworkManager.service`, not "Started Network Manager"), along with anything sent through `plymouth display-message`. The newest is on top and older ones fade out.
 
-These instructions are basically how this theme was generated
+## How the theme works
 
-1. Generate NixOS Logo from branding repo
-2. Edit in inkscape
-   1. Group logo and center in background layer
-   2. Duplicate logo group and set blur to 15%
-   3. Duplicate logo and set blur to 30%
-   4. Group both blurs
-3. Animate in xyris.app
-   1. Create pulse animation
-      1. Set logo opacity to 100 and blur layer opacity to 100
-      2. Animate blur layer
-      3. Set keyframe at the following positions with the following opacities for the blur layer
-         1. 0s 0%
-         2. 2.5s 100%
-         3. 3s   100%
-         4. 5.5s 0%
-         5. 6s   0%
-      4. Set ease in to all transitions
-      5. Export as svg
-4. Convert animated svg to png frames
-5. Run the following:
-   ``bash nix-shell -p nodejs ungoogled-chromium cd tools/render-svg-frames export PUPPETEER_EXECUTABLE_PATH=$(which chromium) export PUPPETEER_SKIP_DOWNLOAD=true npm install puppeteer node render-svg-frames.js '../../resources/nixos-logo-animated.svg' ``
-6. Copy the resulting throbber images to `src/resources`
-7. Use inkscape to convert the icons in `resources/current` or other desired svgs to png and move to `src/resources`
-8. Edit the plymouth file as desired (`src/x-plymouth.plymouth` for the classic scheme, `src/halon/` for light and dark)
+Everything is drawn by one script for Plymouth's script module, [src/x-plymouth.script](src/x-plymouth.script). The two-step module would be simpler, but it draws all text in white, which is unreadable on the light scheme.
+
+At build time, [x-plymouth.nix](x-plymouth.nix) turns the logo into two images of the same size:
+
+- `logo.png`: the logo trimmed to its shape, scaled to `logoWidth`, and painted in the scheme's text colour unless `logoRecolor` is off.
+- `glow.png`: the logo's shape blurred twice (σ = 2 and 15 px at 614 px wide, scaled with the width), combined, and filled with the glow colour.
+
+At boot the script stacks the glow under the logo and fades its opacity through a 6 second cycle. It rises over 2.5 s, holds for 0.5 s, falls over 2.5 s and rests for 0.5 s, easing in as p^1.75. Those numbers reproduce the hand-animated frames the theme used to ship, which were made in Inkscape and xyris.app from the [NixOS logo](src/nixos-logo.svg) with two blurred copies.
+
+The scheme colours are X-Login's Halon tokens, kept in `x-plymouth.nix`. The password dialog icons are rendered from the SVG templates in [src/icons/](src/icons/).
 
 ## Testing the changes
 
