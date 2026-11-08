@@ -2,7 +2,7 @@
 {
     config.boot.plymouth = {
         enable = true;
-        themePackages = [ (pkgs.callPackage ./nixos-plymouth.nix { }) ];
-        theme = "nixos-plymouth";
+        themePackages = [ (pkgs.callPackage ./x-plymouth.nix { }) ];
+        theme = "x-plymouth";
     };
 }

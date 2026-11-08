@@ -1,10 +1,10 @@
 [Plymouth Theme]
-Name=nixos-plymouth
+Name=x-plymouth
 Description=A NixOS Plymouth theme that fades into the the NixOS Logo
 ModuleName=two-step
 
 [two-step]
-ImageDir=/usr/share/plymouth/themes/nixos-plymouth/resources
+ImageDir=/usr/share/plymouth/themes/x-plymouth/resources
 
 BackgroundStartColor=0x000000
 BackgroundEndColor=0x000000

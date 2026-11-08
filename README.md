@@ -1,4 +1,4 @@
-## NixOS Plymouth
+## X-Plymouth
 
 This repo contains a plymouth theme for NixOS that pulses the NixOS logo. Please check out the credits section for all the work that inspired this.
 
@@ -17,12 +17,12 @@ You can include it in your `flakes.nix` like this:
 
 ```nix
 {
-  inputs.nixos-plymouth.url = "github:BeatLink/nixos-plymouth";;
-  outputs = { self, nixpkgs, nixos-plymouth }:
+  inputs.x-plymouth.url = "github:x-tech-laboratories/X-Plymouth";;
+  outputs = { self, nixpkgs, x-plymouth }:
   {
     nixosConfigurations."<hostname>" = nixpkgs.lib.nixosSystem {
       modules = [ 
-        nixos-plymouth.nixosModules.default 
+        x-plymouth.nixosModules.default 
         ... 
       ];
       system  = "x86_64-linux";
@@ -40,15 +40,15 @@ You can include it in your `configuration.nix` like this:
 { config, lib, pkgs, ...}:
 let
   # Fetch the repository
-  nixos-plymouth-src = pkgs.fetchFromGitHub {
-    owner = "BeatLink";
-    repo = "nixos-plymouth";
+  x-plymouth-src = pkgs.fetchFromGitHub {
+    owner = "x-tech-laboratories";
+    repo = "X-Plymouth";
     rev = "main";
     sha256 = "sha256-<hash>";
   };
 in
 {
-  imports = [ "${nixos-plymouth-src}/modules.nix" ];
+  imports = [ "${x-plymouth-src}/modules.nix" ];
 }
 ```
 
