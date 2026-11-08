@@ -52,7 +52,7 @@ let
   };
 in
 {
-  imports = [ "${x-plymouth-src}/modules.nix" ];
+  imports = [ "${x-plymouth-src}/default.nix" ];
 }
 ```
 
