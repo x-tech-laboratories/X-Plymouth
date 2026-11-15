@@ -1,8 +1,14 @@
 {
     pkgs ? import <nixpkgs> { },
     lib ? pkgs.lib,
-    # "light" and "dark" follow X-Login's Halon schemes; "classic" is the original black and white
+    # "light" and "dark" follow X-Login's Halon schemes; "classic" is the original black and white;
+    # "custom" uses the colors attribute
     variant ? "light",
+    # Custom palette; required when variant = "custom", ignored otherwise.
+    # All nine fields must be hex colours without "#", e.g. "60a5fa":
+    #   SURFACE_ROOT, SURFACE_DEFAULT, BORDER_DEFAULT, BORDER_CONTROL, ACCENT,
+    #   TEXT_HEADING, TEXT_SECONDARY, TEXT_TERTIARY, STATUS_WARNING
+    colors ? null,
     # Any SVG or raster image
     logo ? ./src/nixos-logo.svg,
     # Paint the logo in the scheme's heading colour; false keeps its own colours
@@ -15,6 +21,11 @@
     statusLines ? 5,
 }:
 let
+    colorKeys = [
+        "SURFACE_ROOT" "SURFACE_DEFAULT" "BORDER_DEFAULT" "BORDER_CONTROL"
+        "ACCENT" "TEXT_HEADING" "TEXT_SECONDARY" "TEXT_TERTIARY" "STATUS_WARNING"
+    ];
+
     # Halon tokens, from X-Themes/halon/tokens.json
     palettes = {
         light = {
@@ -51,7 +62,7 @@ let
             STATUS_WARNING = "ffffff";
         };
     };
-    palette = palettes.${variant};
+    palette = if variant == "custom" then colors else palettes.${variant};
     glow = if glowColor == null then palette.ACCENT else lib.removePrefix "#" glowColor;
 
     # The glow is the logo blurred twice and screened together, fitted to the hand-made glow of the
@@ -70,7 +81,16 @@ let
     substituteFlags =
         format: lib.concatStringsSep " " (lib.mapAttrsToList (name: hex: "--replace-quiet @${name}@ '${format hex}'") palette);
 in
-assert lib.assertOneOf "variant" variant [ "light" "dark" "classic" ];
+assert lib.assertOneOf "variant" variant [ "light" "dark" "classic" "custom" ];
+assert lib.assertMsg
+    (variant != "custom" || colors != null)
+    "When variant is \"custom\", the colors attribute must be set with all required fields: ${lib.concatStringsSep ", " colorKeys}";
+assert lib.assertMsg
+    (variant != "custom" || lib.all (k: builtins.hasAttr k colors) colorKeys)
+    "When variant is \"custom\", colors is missing: ${lib.concatStringsSep ", " (lib.filter (k: !builtins.hasAttr k colors) colorKeys)}";
+assert lib.assertMsg
+    (variant != "custom" || lib.all (k: builtins.match "[0-9a-fA-F]{6}" colors.${k} != null) colorKeys)
+    "When variant is \"custom\", each value in colors must be a 6-digit hex colour like \"60a5fa\"";
 assert lib.assertMsg (builtins.match "[0-9a-fA-F]{6}" glow != null) "glowColor must be a hex colour like \"#60a5fa\"";
 assert lib.assertMsg (builtins.isInt statusLines && statusLines >= 0) "statusLines must be a whole number, 0 or more";
 pkgs.stdenv.mkDerivation {
