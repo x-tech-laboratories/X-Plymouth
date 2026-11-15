@@ -65,7 +65,7 @@ Every setting is optional:
 
 ```nix
 x-plymouth = {
-  variant = "dark";          # "light" (default), "dark" or "classic"
+  variant = "dark";          # "light" (default), "dark", "classic", or "custom"
   logo = ./my-logo.svg;      # SVG or any image ImageMagick reads; defaults to the NixOS logo
   logoRecolor = true;        # paint the logo in the scheme's text colour; false keeps its own colours
   logoWidth = 614;           # logo width on screen in pixels, glow excluded
@@ -73,6 +73,29 @@ x-plymouth = {
   statusLines = 5;           # boot statuses listed under the progress bar; 0 hides them
 };
 ```
+
+### Custom colours
+
+Set `variant = "custom"` and supply all nine colour fields in `colors`. Every field is a hex colour without `#`:
+
+```nix
+x-plymouth = {
+  variant = "custom";
+  colors = {
+    SURFACE_ROOT    = "0d1117";   # page background
+    SURFACE_DEFAULT = "161b22";   # card / dialog background
+    BORDER_DEFAULT  = "30363d";   # subtle borders
+    BORDER_CONTROL  = "8b949e";   # input borders
+    ACCENT          = "58a6ff";   # progress bar fill and default glow
+    TEXT_HEADING    = "f0f6fc";   # logo colour when logoRecolor = true
+    TEXT_SECONDARY  = "c9d1d9";   # primary status text
+    TEXT_TERTIARY   = "8b949e";   # faded older status lines
+    STATUS_WARNING  = "d29922";   # warning-level status text
+  };
+};
+```
+
+All nine fields are required; omitting any one raises a build error listing the missing keys.
 
 Plymouth runs before any desktop session, so it cannot follow the system's colour scheme; the variant is fixed here.
 
